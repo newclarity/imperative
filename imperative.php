@@ -1,6 +1,6 @@
 <?php
 /**
- * The Missing register_library() for Embedded Libraries within WordPress Plugins and Themes.
+ * The Missing require_library() for Embedded Libraries within WordPress Plugins and Themes.
  *
  * @package Imperative
  * @version 0.0.0
@@ -66,7 +66,7 @@ class WP_Library_Manager {
    * @param array $args
    * @return bool
    */
-  function register_library(  $library_name, $version, $plugin_file, $library_path, $args = array() ) {
+  function require_library(  $library_name, $version, $plugin_file, $library_path, $args = array() ) {
     $args['library_name'] = $library_name;
     $args['version'] = $version;
     $args['plugin_file'] = $plugin_file;
@@ -140,8 +140,8 @@ new WP_Library_Manager();
  * @param array $args
  * @return bool
  */
-function register_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
-  return WP_Library_Manager::me()->register_library( $library_name, $version, $plugin_file, $library_path, $args );
+function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
+  return WP_Library_Manager::me()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
 }
 /**
  * @param string $plugin_file
