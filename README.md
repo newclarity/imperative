@@ -1,4 +1,4 @@
 imperative
 ==========
 
-A Tiny Library for Managing Embedded Libraries within WordPress Plugins and Themes.
+The Missing register_library() for Embedded Libraries within WordPress Plugins and Themes.
