@@ -76,25 +76,28 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
           foreach( $versions as $library ) {
             if ( $first_library->major_version == $library->major_version )
               continue;
-            $plugin_files = get_plugins();
-            $this_plugin_slug = substr( current_filter(), strlen( 'activate_') );
-            $this_plugin = $plugin_files[$this_plugin_slug];
-
-            $other_plugin_slug = ltrim( str_replace( WP_PLUGIN_DIR, '', $first_library->plugin_file ), '/' );
-            $other_plugin = $plugin_files[$other_plugin_slug];
-
-            if ( preg_match( "#{$this_plugin_slug}$#", $library->plugin_file ) ) {
-              $this_version = $library->version;
-              $other_version = $first_library->version;
-            } else {
-              $this_version = $first_library->version;
-              $other_version = $library->version;
-            }
-
-            $guilty_plugin = version_compare( $this_version, $other_version ) ? $other_plugin['Name'] : $this_plugin['Name'];
-            $newer_version = version_compare( $this_version, $other_version ) ? $this_version : $other_version;
+            $to_remove = $library->plugin_file;
 
             if ( $this->is_plugin_activation() ) {
+
+              $plugin_files = get_plugins();
+              $this_plugin_slug = substr( current_filter(), strlen( 'activate_') );
+              $this_plugin = $plugin_files[$this_plugin_slug];
+
+              $other_plugin_slug = ltrim( str_replace( WP_PLUGIN_DIR, '', $first_library->plugin_file ), '/' );
+              $other_plugin = $plugin_files[$other_plugin_slug];
+
+              if ( preg_match( "#{$this_plugin_slug}$#", $library->plugin_file ) ) {
+                $this_version = $library->version;
+                $other_version = $first_library->version;
+              } else {
+                $this_version = $first_library->version;
+                $other_version = $library->version;
+              }
+
+              $guilty_plugin = version_compare( $this_version, $other_version ) ? $other_plugin['Name'] : $this_plugin['Name'];
+              $newer_version = version_compare( $this_version, $other_version ) ? $this_version : $other_version;
+
               $message = sprintf( __( '<p><strong>Plugin Activation Error:</strong> The plugin you trying to activate named
                 <strong>%s</strong> contains <strong>version %s</strong> of the <strong>%s</strong> embedded library
                 and it conflicts with <strong>version %s</strong> of the same library
@@ -116,7 +119,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
                 $message = "{$activation_error}<hr>{$message}";
               $this->update_activation_error( $message );
             }
-            $to_remove = $library->plugin_file;
             break;
           }
         }
