@@ -28,10 +28,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     /**
      * @var array
      */
-    private $_candidates = array();
-    /**
-     * @var array
-     */
     private $_loaders = array();
     /**
      * @var array
