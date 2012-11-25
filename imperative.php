@@ -129,10 +129,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
             if ( $to_remove == $library->plugin_file )
               unset( $this->_libraries[$library_name][$version] );
 
-        foreach ( $this->_candidates as $index => $candidate )
-          if ( $to_remove == $candidate->plugin_file )
-            unset( $this->_candidates[$index] );
-
         unset( $this->_loaders[$to_remove] );
 
         $plugin_files = array_flip( $this->_plugin_files );
@@ -185,7 +181,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @param string $plugin_file
      * @param string $library_path
      * @param array $args
-     * @return bool
      */
     function require_library(  $library_name, $version, $plugin_file, $library_path, $args = array() ) {
       $plugin_file = $this->_un_symlink_plugin_file( $plugin_file );
@@ -196,16 +191,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $args['plugin_file'] = $plugin_file;
       $args['library_path'] = ( '/' == $library_path[0] ) ? $library_path : dirname( $plugin_file ) . "/{$library_path}";
 
-      $candidate = (object)$args;
-      $this->_candidates[] = &$candidate;
-
       /**
        * This assumes same named and same version are literally the same. Which only works when everyone places
        * nice but then the WordPress ecosystem has checks & balances for those that don't play nice.
        */
-      $this->_libraries[$library_name][$version] =  &$candidate;
-
-      return true;
+      $this->_libraries[$library_name][$version] = (object)$args;
     }
 
     /**
@@ -223,7 +213,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         /*
          * Handle plugins that included in the plugin directory but w/o their own subdirectory
          */
-        $new_plugin_file = str_replace( '/plugins/plugins/', '/plugins/', $new_plugin_file ); // Handle plugins
+        $new_plugin_file = str_replace( '/plugins/plugins/', '/plugins/', $new_plugin_file );
         $plugin_file = $this->_plugin_files[$plugin_file] = $new_plugin_file;
         /*
          * We only want to do this once.
@@ -355,16 +345,16 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    * @param string $plugin_file
    * @param string $library_path
    * @param array $args
-   * @return bool
    */
   function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
-    return WP_Library_Manager::me()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
+    WP_Library_Manager::me()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
   }
   /**
    * @param string $plugin_file
    * @param callable $loader_file
+   * @param array $args
    */
-  function register_loader( $plugin_file, $loader_file ) {
-    WP_Library_Manager::me()->register_loader( $plugin_file, $loader_file );
+  function register_loader( $plugin_file, $loader_file, $args = array() ) {
+    WP_Library_Manager::me()->register_loader( $plugin_file, $loader_file, $args );
   }
 }
