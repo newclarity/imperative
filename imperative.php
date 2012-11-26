@@ -358,7 +358,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       global $pagenow;
       return 'plugins.php' == $pagenow
         && isset( $_GET['action'] ) && 'delete-selected' == $_GET['action']
-          && isset( $_GET['plugin'] ) && is_array( $_GET['plugin'] );
+        && isset( $_GET['checked'] ) && is_array( $_GET['checked'] );
     }
 
   }
