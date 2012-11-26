@@ -91,8 +91,13 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
                 $other_version = $library->version;
               }
 
-              $guilty_plugin = version_compare( $this_version, $other_version ) ? $other_plugin['Name'] : $this_plugin['Name'];
-              $newer_version = version_compare( $this_version, $other_version ) ? $this_version : $other_version;
+              if ( version_compare( $this_version, $other_version ) ) {
+                $guilty_plugin = $other_plugin['Name'];
+                $newer_version = $this_version;
+              } else {
+                $guilty_plugin = $this_plugin['Name'];
+                $newer_version =  $other_version;
+              }
 
               $message = sprintf( __( '<p><strong>Plugin Activation Error:</strong> The plugin you trying to activate named
                 <strong>%s</strong> contains <strong>version %s</strong> of the <strong>%s</strong> embedded library
@@ -130,7 +135,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         $plugin_files = array_flip( $this->_plugin_files );
         unset( $this->_plugin_files[$plugin_files[$to_remove]] );
 
-        global $status, $page, $s;
+        global $status, $page;
 
         if ( ! $this->is_plugin_error_scrape() ) {
           $redirect = self_admin_url( "plugins.php?error=true&plugin={$this_plugin_slug}&plugin_status={$status}&paged={$page}" );
