@@ -59,8 +59,21 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       add_action( 'after_setup_theme', array( $this, 'after_setup_theme' ), 0 );  // Priorty = 0, do early.
       add_action( 'admin_notices', array( $this, 'admin_notices' ), 0 );  // Priorty = 0, do early.
 
+      if ( $this->is_plugin_uninstall() ) {
+        foreach( $_GET['checked'] as $plugin ) {
+          add_action( "uninstall_{$plugin}", array( $this, 'uninstall_plugin' ) );
+        }
+      }
+
     }
 
+    /**
+     *
+     */
+    function uninstall_plugin() {
+      $this->after_setup_theme( true );
+      $this->release_memory();
+    }
     /**
      */
     function activate() {
@@ -334,6 +347,18 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       return 'plugins.php' == $pagenow
         && isset( $_GET['action'] ) && 'error_scrape' == $_GET['action']
         && isset( $_GET['plugin'] );
+    }
+
+    /**
+     * Used to check if we are in an activation callback on the Plugins page.
+     *
+     * @return bool
+     */
+    function is_plugin_uninstall() {
+      global $pagenow;
+      return 'plugins.php' == $pagenow
+        && isset( $_GET['action'] ) && 'delete-selected' == $_GET['action']
+          && isset( $_GET['plugin'] ) && is_array( $_GET['plugin'] );
     }
 
   }
