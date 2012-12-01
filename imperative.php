@@ -12,6 +12,8 @@
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
  * @copyright Copyright (c) 2012, NewClarity LLC
  *
+ * @todo Add support for Windows file systems.
+ *
  */
 if ( ! class_exists( 'WP_Library_Manager' ) ) {
   /**
@@ -238,10 +240,17 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     }
     /**
      * @param string $plugin_file
-     * @param callable $loader_file
+     * @param string|bool $loader_file
      */
-    function register_loader( $plugin_file, $loader_file ) {
+    function register_loader( $plugin_file, $loader_file = false ) {
       $plugin_file = $this->_un_symlink_plugin_file( $plugin_file );
+      $plugin_dir = dirname( $plugin_file );
+      if ( ! $loader_file ) {
+        $loader_file = "{$plugin_dir}/loader.php";
+        if ( ! file_exists( $loader_file ) ) {
+          $loader_file = preg_match( '#(.*?)\.php$#', '$1-loader.php', $plugin_file );
+        }
+      }
       if ( '/' != $loader_file[0] )
         $loader_file = dirname( $plugin_file ) . "/{$loader_file}";
       if ( ! file_exists( $loader_file ) ) {
@@ -377,10 +386,10 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
   }
   /**
    * @param string $plugin_file
-   * @param callable $loader_file
+   * @param string|bool $loader_file
    * @param array $args
    */
-  function register_loader( $plugin_file, $loader_file, $args = array() ) {
+  function register_loader( $plugin_file, $loader_file = false, $args = array() ) {
     WP_Library_Manager::me()->register_loader( $plugin_file, $loader_file, $args );
   }
 }
