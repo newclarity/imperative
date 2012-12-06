@@ -248,7 +248,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       if ( ! $loader_file ) {
         $loader_file = "{$plugin_dir}/loader.php";
         if ( ! file_exists( $loader_file ) ) {
-          $loader_file = preg_match( '#(.*?)\.php$#', '$1-loader.php', $plugin_file );
+          $loader_file = preg_replace( '#(.*?)\.php$#', '$1-loader.php', $plugin_file );
         }
       }
       if ( '/' != $loader_file[0] )
