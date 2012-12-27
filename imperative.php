@@ -20,9 +20,9 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    */
   class WP_Library_Manager {
     /**
-     * @var WP_Library_Manager $_me
+     * @var WP_Library_Manager $_this
      */
-    private static $_me;
+    private static $_this;
     /**
      * @var array
      */
@@ -43,21 +43,21 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     /**
      * @return WP_Library_Manager
      */
-    static function me() {
-      return self::$_me;
+    static function this() {
+      return self::$_this;
     }
     /**
      *
      */
     function __construct() {
-      if ( self::$_me instanceof WP_Library_Manager ) {
-        $message = __( '%s is a singleton class and cannot be instantiated more than once. Use WP_Library_Manager::me() instead.', 'imperative' );
+      if ( self::$_this instanceof WP_Library_Manager ) {
+        $message = __( '%s is a singleton class and cannot be instantiated more than once. Use WP_Library_Manager::this() instead.', 'imperative' );
         echo '<div class="error"><p><strong>ERROR</strong>: ' . sprintf( $message, get_class( $this ) ) . '</p></div>';
       }
       /*
        *  WP_Library_Manager::me() is needed to allow plugins to remove hooks if needed.
        */
-      self::$_me = &$this;
+      self::$_this = &$this;
       add_action( 'after_setup_theme', array( $this, 'after_setup_theme' ), 0 );  // Priorty = 0, do early.
       add_action( 'admin_notices', array( $this, 'admin_notices' ), 0 );  // Priorty = 0, do early.
 
@@ -382,7 +382,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    * @param array $args
    */
   function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
-    WP_Library_Manager::me()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
+    WP_Library_Manager::this()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
   }
   /**
    * @param string $plugin_file
@@ -390,6 +390,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    * @param array $args
    */
   function register_loader( $plugin_file, $loader_file = false, $args = array() ) {
-    WP_Library_Manager::me()->register_loader( $plugin_file, $loader_file, $args );
+    WP_Library_Manager::this()->register_loader( $plugin_file, $loader_file, $args );
   }
 }
