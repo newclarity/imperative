@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.0
+ * @version 0.0.1
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -198,7 +198,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @param string $library_path
      * @param array $args
      */
-    function require_library(  $library_name, $version, $plugin_file, $library_path, $args = array() ) {
+    function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
       $plugin_file = $this->_un_symlink_plugin_file( $plugin_file );
 
       $args['library_name'] = $library_name;
@@ -206,6 +206,9 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $args['major_version'] = intval( substr( $version, 0, strpos( $version, '.' ) ) );
       $args['plugin_file'] = $plugin_file;
       $args['library_path'] = ( '/' == $library_path[0] ) ? $library_path : dirname( $plugin_file ) . "/{$library_path}";
+
+      if ( ! is_file( $args['library_path'] ) )
+        $args['library_path'] = WP_CONTENT_DIR . "/{$library_path}";
 
       /**
        * This assumes same named and same version are literally the same. Which only works when everyone places
