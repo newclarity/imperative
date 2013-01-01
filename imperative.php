@@ -6,17 +6,15 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.4
+ * @version 0.0.5
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
  * @copyright Copyright (c) 2012, NewClarity LLC
  *
- * @todo Add register_plugin_loader() and register_theme_loader(),
- * @todo ...deprecate register_loader(), use after_theme_setup for themes.
+ * @todo Add tested support for loading libraries via themes.
  *
  * @todo Add support for Windows file systems.
- *
  *
  */
 if ( ! class_exists( 'WP_Library_Manager' ) ) {
@@ -50,6 +48,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     static function this() {
       return self::$_this;
     }
+
     /**
      *
      */
@@ -80,6 +79,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $this->plugins_loaded( true );
       $this->release_memory();
     }
+
     /**
      */
     function activate() {
@@ -174,17 +174,20 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     function get_activation_error() {
       return get_option( 'imperative_activation_error' );
     }
+
     /**
      * @param string $message
      */
     function update_activation_error( $message ) {
       update_option( 'imperative_activation_error', $message );
     }
+
     /**
      */
     function delete_activation_error() {
       return delete_option( 'imperative_activation_error' );
     }
+
     /**
      *
      */
@@ -195,6 +198,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       }
       $this->delete_activation_error();
     }
+
     /**
      * @param string $library_name
      * @param string $version
@@ -249,6 +253,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       }
       return $plugin_file;
     }
+
     /**
      * @param string $plugin_file
      * @param string|bool $loader_file
@@ -277,6 +282,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     function get_current_library() {
       return $this->_current_library;
     }
+
     /**
      * Load libraries and any required loaders after the theme is loaded
      *
@@ -315,7 +321,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       /**
        * Allow processing to happen after libraries are loaded.
        */
-      do_action( 'plugin_libraries_loaded' );
+      do_action( 'libraries_loaded' );
 
       /**
        * Load any of the plugin loaders that were registered.
@@ -339,6 +345,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         $this->release_memory();
 
     }
+
     /**
      * Releases memory used by this class after it's needed.
      *
@@ -352,6 +359,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         $this->$property = null;
       }
     }
+
     /**
      * Used to check if we are in an activation callback on the Plugins page.
      *
@@ -363,6 +371,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         && isset( $_GET['action'] ) && 'activate' == $_GET['action']
         && isset( $_GET['plugin'] );
     }
+
     /**
      * Used to check if we are in an activation callback on the Plugins page.
      *
@@ -390,7 +399,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
   }
   new WP_Library_Manager();
 
-
   /**
    * @param string $library_name
    * @param string $version
@@ -401,14 +409,27 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
   function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
     WP_Library_Manager::this()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
   }
+
   /**
    * @param string $plugin_file
    * @param string|bool $loader_file
    * @param array $args
    */
   function register_plugin_loader( $plugin_file, $loader_file = false, $args = array() ) {
+    $args['loader_type'] = 'plugin';
     WP_Library_Manager::this()->register_plugin_loader( $plugin_file, $loader_file, $args );
   }
+
+  /**
+   * @param string $plugin_file
+   * @param string|bool $loader_file
+   * @param array $args
+   */
+  function register_theme_loader( $plugin_file, $loader_file = false, $args = array() ) {
+    $args['loader_type'] = 'theme';
+    WP_Library_Manager::this()->register_plugin_loader( $plugin_file, $loader_file, $args );
+  }
+
   /**
    * @deprecated 0.0.4
    * @param string $plugin_file
