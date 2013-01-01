@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.6
+ * @version 0.0.7
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -238,6 +238,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @return string
      */
     private function _un_symlink_plugin_file( $plugin_file ) {
+      $realpath = realpath( $plugin_file );
       if ( isset( $this->_plugin_files[$plugin_file] ) ) {
         $plugin_file = $this->_plugin_files[$plugin_file];
       } else {
@@ -254,6 +255,35 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
          * We only want to do this once.
          */
         register_activation_hook( $plugin_file, array( $this, 'activate' ) );
+      }
+      if ( ! is_file( $plugin_file ) ) {
+        /**
+         * This is a super hack to figure out the path name for this plugin when it is symlinked
+         * but it's not using the same directory name as the source, i.e. if source is:
+         *    ~/Plugins/my-plugin/my-plugin.php
+         * and symlink in site is:
+         *    ~/Sites/my-site/wp-content/plugins/my-plugin-dev/my-plugin.php
+         */
+        $active_plugins = get_option( 'active_plugins' );
+        $basename_regex = preg_quote( basename( $plugin_file ) );
+        foreach( $active_plugins as $plugin_slug ) {
+          /**
+           * Find the plugin slug with that same main filename, ignoring the containing directory
+           */
+          if ( preg_match( "#/{$basename_regex}$#", $plugin_slug ) ) {
+            /**
+             * Compose the filename based on the plugin's slug. This is almost certainly a symlink
+             */
+            $plugin_file = WP_CONTENT_DIR . "/plugins/{$plugin_slug}";
+            /**
+             * See if the realpath of this plugin is the same as the realpath passed in.
+             * And make sure the file actually exists.
+             */
+            if ( realpath( $plugin_file ) == $realpath && is_file( $plugin_file ) ) {
+              break;
+            }
+          }
+        }
       }
       return $plugin_file;
     }
