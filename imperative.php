@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.1
+ * @version 0.0.2
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -310,7 +310,8 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       if ( count( $this->_loaders ) ) {
         global $plugin;
         $save_plugin = $plugin;
-        foreach( $this->_loaders as $plugin => $loader ) {
+        $loaders = apply_filters( 'library_loaders', $this->_loaders );
+        foreach( $loaders as $plugin => $loader ) {
           require_once( $loader );
         }
         $plugin = $save_plugin;
