@@ -6,13 +6,17 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.2
+ * @version 0.0.3
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
  * @copyright Copyright (c) 2012, NewClarity LLC
  *
+ * @todo Add register_plugin_loader() and register_theme_loader(),
+ * @todo ...deprecate register_loader(), use after_theme_setup for themes.
+ *
  * @todo Add support for Windows file systems.
+ *
  *
  */
 if ( ! class_exists( 'WP_Library_Manager' ) ) {
@@ -58,7 +62,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
        *  WP_Library_Manager::me() is needed to allow plugins to remove hooks if needed.
        */
       self::$_this = &$this;
-      add_action( 'after_setup_theme', array( $this, 'after_setup_theme' ), 0 );  // Priorty = 0, do early.
+      add_action( 'plugins_loaded', array( $this, 'plugins_loaded' ), 0 );  // Priorty = 0, do early.
       add_action( 'admin_notices', array( $this, 'admin_notices' ), 0 );  // Priorty = 0, do early.
 
       if ( $this->is_plugin_uninstall() ) {
@@ -73,7 +77,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      *
      */
     function uninstall_plugin() {
-      $this->after_setup_theme( true );
+      $this->plugins_loaded( true );
       $this->release_memory();
     }
     /**
@@ -160,7 +164,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
       }
       if ( ! $to_remove )
-        $this->after_setup_theme( true );
+        $this->plugins_loaded( true );
       $this->release_memory();
     }
 
@@ -207,6 +211,10 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $args['plugin_file'] = $plugin_file;
       $args['library_path'] = ( '/' == $library_path[0] ) ? $library_path : dirname( $plugin_file ) . "/{$library_path}";
 
+      /**
+       * Allow libraries to be kept in /wp-content/libraries/ to aid in debugging
+       * a site that has more than one plugin using the same libraries.
+       */
       if ( ! is_file( $args['library_path'] ) )
         $args['library_path'] = WP_CONTENT_DIR . "/{$library_path}";
 
@@ -274,7 +282,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      *
      * @param bool $force
      */
-    function after_setup_theme( $force = false ) {
+    function plugins_loaded( $force = false ) {
       if ( ! $force && $this->is_plugin_activation() || $this->is_plugin_error_scrape() )
         return;
 
@@ -305,12 +313,17 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       }
 
       /**
+       * Allow processing to happen after libraries are loaded.
+       */
+      do_action( 'plugin_libraries_loaded' );
+
+      /**
        * Load any of the plugin loaders that were registered.
        */
       if ( count( $this->_loaders ) ) {
         global $plugin;
         $save_plugin = $plugin;
-        $loaders = apply_filters( 'library_loaders', $this->_loaders );
+        $loaders = apply_filters( 'plugin_loaders', $this->_loaders );
         foreach( $loaders as $plugin => $loader ) {
           require_once( $loader );
         }
@@ -318,9 +331,9 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       }
 
       /**
-       * Let a plugin hook in after everything is loaded.
+       * Allow processing to happen after plugin loaders are loaded.
        */
-      do_action( 'libraries_loaded' );
+      do_action( 'plug_loaders_loaded' );
 
       if ( ! $force )
         $this->release_memory();
