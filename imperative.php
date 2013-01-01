@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.3
+ * @version 0.0.4
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -253,7 +253,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @param string $plugin_file
      * @param string|bool $loader_file
      */
-    function register_loader( $plugin_file, $loader_file = false ) {
+    function register_plugin_loader( $plugin_file, $loader_file = false ) {
       $plugin_file = $this->_un_symlink_plugin_file( $plugin_file );
       $plugin_dir = dirname( $plugin_file );
       if ( ! $loader_file ) {
@@ -406,7 +406,17 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    * @param string|bool $loader_file
    * @param array $args
    */
+  function register_plugin_loader( $plugin_file, $loader_file = false, $args = array() ) {
+    WP_Library_Manager::this()->register_plugin_loader( $plugin_file, $loader_file, $args );
+  }
+  /**
+   * @deprecated 0.0.4
+   * @param string $plugin_file
+   * @param string|bool $loader_file
+   * @param array $args
+   */
   function register_loader( $plugin_file, $loader_file = false, $args = array() ) {
-    WP_Library_Manager::this()->register_loader( $plugin_file, $loader_file, $args );
+    _deprecated_function( __FUNCTION__, '0.0.4 of library Imperative', 'register_plugin_loader' );
+    register_plugin_loader( $plugin_file, $loader_file, $args );
   }
 }
