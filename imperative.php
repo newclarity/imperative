@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.7
+ * @version 0.0.8
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -238,54 +238,66 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @return string
      */
     private function _un_symlink_plugin_file( $plugin_file ) {
-      $realpath = realpath( $plugin_file );
       if ( isset( $this->_plugin_files[$plugin_file] ) ) {
-        $plugin_file = $this->_plugin_files[$plugin_file];
+        $symlinked_plugin_file = $this->_plugin_files[$plugin_file];
       } else {
+        /**
+         * Save the symlinked path to test against later.
+         */
+        $realpath = realpath( $plugin_file );
         /*
          * Handle plugins that are symlinked
          */
-        $new_plugin_file =  WP_PLUGIN_DIR . '/' . basename( dirname( $plugin_file ) ) . '/' . basename( $plugin_file );
+        $symlinked_plugin_file =  WP_PLUGIN_DIR . '/' . basename( dirname( $plugin_file ) ) . '/' . basename( $plugin_file );
         /*
          * Handle plugins that included in the plugin directory but w/o their own subdirectory
          */
-        $new_plugin_file = str_replace( '/plugins/plugins/', '/plugins/', $new_plugin_file );
-        $plugin_file = $this->_plugin_files[$plugin_file] = $new_plugin_file;
-        /*
-         * We only want to do this once.
-         */
-        register_activation_hook( $plugin_file, array( $this, 'activate' ) );
-      }
-      if ( ! is_file( $plugin_file ) ) {
-        /**
-         * This is a super hack to figure out the path name for this plugin when it is symlinked
-         * but it's not using the same directory name as the source, i.e. if source is:
-         *    ~/Plugins/my-plugin/my-plugin.php
-         * and symlink in site is:
-         *    ~/Sites/my-site/wp-content/plugins/my-plugin-dev/my-plugin.php
-         */
-        $active_plugins = get_option( 'active_plugins' );
-        $basename_regex = preg_quote( basename( $plugin_file ) );
-        foreach( $active_plugins as $plugin_slug ) {
+        $symlinked_plugin_file = str_replace( '/plugins/plugins/', '/plugins/', $symlinked_plugin_file );
+        if ( ! is_file( $symlinked_plugin_file ) ) {
+          global $pagenow;
           /**
-           * Find the plugin slug with that same main filename, ignoring the containing directory
+           * This is a super hack to figure out the path name for this plugin when it is symlinked
+           * but it's not using the same directory name as the source, i.e. if source is:
+           *    ~/Plugins/my-plugin/my-plugin.php
+           * and symlink in site is:
+           *    ~/Sites/my-site/wp-content/plugins/my-plugin-dev/my-plugin.php
            */
-          if ( preg_match( "#/{$basename_regex}$#", $plugin_slug ) ) {
+          if ( 'plugins.php' == $pagenow && isset( $_GET['action'] ) && 'activate' == $_GET['action'] ) {
             /**
-             * Compose the filename based on the plugin's slug. This is almost certainly a symlink
+             * get_plugins() is very expensive to run but we only need to do on plugin activate
              */
-            $plugin_file = WP_CONTENT_DIR . "/plugins/{$plugin_slug}";
+            require_once( ABSPATH . '/wp-admin/includes/plugin.php' );
+            $plugins = array_keys( get_plugins() );
+          } else {
+            $plugins = get_option( 'active_plugins' );
+          }
+          $basename_regex = preg_quote( basename( $symlinked_plugin_file ) );
+          foreach( $plugins as $plugin_slug ) {
             /**
-             * See if the realpath of this plugin is the same as the realpath passed in.
-             * And make sure the file actually exists.
+             * Find the plugin slug with that same main filename, ignoring the containing directory
              */
-            if ( realpath( $plugin_file ) == $realpath && is_file( $plugin_file ) ) {
-              break;
+            if ( preg_match( "#/{$basename_regex}$#", $plugin_slug ) ) {
+              /**
+               * Compose the filename based on the plugin's slug. This is almost certainly a symlink
+               */
+              $symlinked_plugin_file = WP_CONTENT_DIR . "/plugins/{$plugin_slug}";
+              /**
+               * See if the realpath of this plugin is the same as the realpath passed in.
+               * And make sure the file actually exists.
+               */
+              if ( realpath( $symlinked_plugin_file ) == $realpath && is_file( $symlinked_plugin_file ) ) {
+                break;
+              }
             }
           }
         }
+        $this->_plugin_files[$plugin_file] = $symlinked_plugin_file;
+        /*
+         * We only want to do this once.
+         */
+        register_activation_hook( $symlinked_plugin_file, array( $this, 'activate' ) );
       }
-      return $plugin_file;
+      return $symlinked_plugin_file;
     }
 
     /**
