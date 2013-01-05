@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.8
+ * @version 0.0.9
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -86,7 +86,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
     /**
      */
-    function activate() {
+    function activate_plugin() {
       $to_remove = false;
 
       foreach ( $this->_libraries as $versions ) {
@@ -295,7 +295,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         /*
          * We only want to do this once.
          */
-        register_activation_hook( $symlinked_plugin_file, array( $this, 'activate' ) );
+        add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
       }
       return $symlinked_plugin_file;
     }
