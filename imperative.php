@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.9
+ * @version 0.0.10
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -60,12 +60,9 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       /*
        *  WP_Library_Manager::me() is needed to allow plugins to remove hooks if needed.
        *
-       * @note IMPORTANT!!! Do not change from 'after_setup_theme' to 'plugins_loaded'
-       * @note - This must be done after themes load so thems can contribute libraries too.
-       *
        */
       self::$_this = &$this;
-      add_action( 'after_setup_theme', array( $this, 'after_setup_theme' ), 0 );  // Priorty = 0, do early.
+      add_action( 'plugins_loaded', array( $this, 'plugins_loaded' ), 0 );  // Priorty = 0, do early.
       add_action( 'admin_notices', array( $this, 'admin_notices' ), 0 );  // Priorty = 0, do early.
 
       if ( $this->is_plugin_uninstall() ) {
@@ -80,7 +77,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      *
      */
     function uninstall_plugin() {
-      $this->after_setup_theme( true );
+      $this->plugins_loaded( true );
       $this->release_memory();
     }
 
@@ -168,7 +165,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
       }
       if ( ! $to_remove )
-        $this->after_setup_theme( true );
+        $this->plugins_loaded( true );
       $this->release_memory();
     }
 
@@ -330,11 +327,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     }
 
     /**
-     * Load libraries and any required loaders after the theme is loaded
+     * Load libraries and any required loaders after the plugins are loaded
      *
      * @param bool $force
      */
-    function after_setup_theme( $force = false ) {
+    function plugins_loaded( $force = false ) {
       if ( ! $force && $this->is_plugin_activation() || $this->is_plugin_error_scrape() )
         return;
 
