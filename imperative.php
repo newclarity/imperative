@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.0.10
+ * @version 0.1.0
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -29,6 +29,10 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @var array
      */
     private $_libraries = array();
+    /**
+     * @var array
+     */
+    private $_library_keys = array();
     /**
      * @var array
      */
@@ -65,12 +69,14 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       add_action( 'plugins_loaded', array( $this, 'plugins_loaded' ), 0 );  // Priorty = 0, do early.
       add_action( 'admin_notices', array( $this, 'admin_notices' ), 0 );  // Priorty = 0, do early.
 
+      if ( $this->is_plugin_activation() )
+        add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
+
       if ( $this->is_plugin_uninstall() ) {
         foreach( $_GET['checked'] as $plugin ) {
           add_action( "uninstall_{$plugin}", array( $this, 'uninstall_plugin' ) );
         }
       }
-
     }
 
     /**
@@ -82,10 +88,39 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     }
 
     /**
+     * Take the plugin slug passed in from WordPress and fixup the filenames fix this plugin to support symlinking
+     *
+     * This is called after our plugin was loaded, but since we haven't really loaded
+     *
+     * @param string $plugin_file
      */
-    function activate_plugin() {
-      $to_remove = false;
+    private function _fixup_symlinked( $plugin_file ) {
 
+      $plugin_filepath = WP_PLUGIN_DIR . "/{$plugin_file}";
+      $plugin_dir = dirname( $plugin_filepath );
+      $real_filepath = realpath( $plugin_filepath );
+      $this->_loaders[$real_filepath] = $plugin_filepath;
+      foreach( $this->_library_keys[$real_filepath] as $library_name => $library_keys ) {
+        $library = $this->_libraries[$library_keys['library']][$library_keys['version']];
+
+        $library->plugin_file = $plugin_filepath;
+        $library_filepath = "{$plugin_dir}/{$library->library_file}";
+
+        if ( ! file_exists( $library_filepath ) )
+          $library_filepath = WP_CONTENT_DIR . "/{$library->library_file}";
+
+        if ( file_exists( $library_filepath ) )
+          $library->library_file = $library_filepath;
+
+        $this->_libraries[$library_keys['library']][$library_keys['version']] = $library;
+      }
+    }
+
+    /**
+     */
+    function activate_plugin( $plugin_file ) {
+      $to_remove = false;
+      $this->_fixup_symlinked( $plugin_file );
       foreach ( $this->_libraries as $versions ) {
         if ( 1 < count( $versions ) ) {
           $first_library = current( $versions );
@@ -201,100 +236,90 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     }
 
     /**
+     * Get the full plugin filepath if available in a global variable from WordPress
+     *
+     * @param string $plugin_file
+     *
+     * @return string
+     */
+    function _get_plugin_filepath( $plugin_file ) {
+      global $mu_plugin, $network_plugin, $plugin;
+      if ( isset( $mu_plugin ) ) {
+        $virtual_filepath = $mu_plugin;
+      } else if ( isset( $network_plugin ) ) {
+        $virtual_filepath = $network_plugin;
+      } else if ( isset( $plugin ) ) {
+        $virtual_filepath = $plugin;
+      }
+      if ( $this->is_plugin_activation() ) {
+        $plugin_file = WP_PLUGIN_DIR . "/{$virtual_filepath}";
+      } else if ( $this->is_plugin_uninstall()) {
+        if ( isset( $_GET['checked'] ) )
+          foreach( $_GET['checked'] as $plugin ) {
+            $virtual_filepath = WP_PLUGIN_DIR . "/{$plugin}";
+            if ( realpath( $virtual_filepath ) == $plugin_file ) {
+              $plugin_file = $virtual_filepath;
+              break;
+            }
+          }
+      } else if ( isset( $virtual_filepath ) ) {
+        $plugin_file = $virtual_filepath;
+      }
+      return $plugin_file;
+    }
+
+    /**
      * @param string $library_name
      * @param string $version
      * @param string $plugin_file
-     * @param string $library_path
+     * @param string $library_file
      * @param array $args
      */
-    function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
-      $plugin_file = $this->_un_symlink_plugin_file( $plugin_file );
+    function require_library( $library_name, $version, $plugin_file, $library_file, $args = array() ) {
+
+      $fixedup_plugin_file = $this->_get_plugin_filepath( $plugin_file, true );
 
       $args['library_name'] = $library_name;
       $args['version'] = $version;
       $args['major_version'] = intval( substr( $version, 0, strpos( $version, '.' ) ) );
-      $args['plugin_file'] = $plugin_file;
-      $args['library_path'] = ( '/' == $library_path[0] ) ? $library_path : dirname( $plugin_file ) . "/{$library_path}";
+      $args['plugin_file'] = $fixedup_plugin_file;
 
-      /**
-       * Allow libraries to be kept in /wp-content/libraries/ to aid in debugging
-       * a site that has more than one plugin using the same libraries.
-       */
-      if ( ! is_file( $args['library_path'] ) )
-        $args['library_path'] = WP_CONTENT_DIR . "/{$library_path}";
+      if ( $this->is_plugin_activation() ) {
+        /**
+         * If plugin activation we'll store partial and wait to fixup in 'active_plugin' hook.
+         * Otherwise let's get the real filename
+         */
+        $args['library_file'] =  $library_file;
+      } else if ( is_file(  $library_filepath = dirname( $fixedup_plugin_file ) . "/{$library_file}" ) ) {
+        /**
+         * If the library is embedded in the plugin in "{$plugin_dir}/libraries/{$lib_name}/{$lib_name}.php"
+         */
+        $args['library_file'] =  $library_filepath;
+      } else if ( is_file(  $library_filepath = WP_CONTENT_DIR . "/{$library_file}" ) ) {
+        /**
+         * If the library is in WP_CONTENT_DIR . "/libraries/{$lib_name}/{$lib_name}.php"
+         */
+        $args['library_file'] =  $library_filepath;
+      } else {
+        /*
+         * Default to something. It's probably wrong...
+         */
+        $args['library_file'] =  $library_file;
+      }
 
       /**
        * This assumes same named and same version are literally the same. Which only works when everyone places
        * nice but then the WordPress ecosystem has checks & balances for those that don't play nice.
        */
       $this->_libraries[$library_name][$version] = (object)$args;
-    }
 
-    /**
-     * @param string $plugin_file
-     * @return string
-     */
-    private function _un_symlink_plugin_file( $plugin_file ) {
-      if ( isset( $this->_plugin_files[$plugin_file] ) ) {
-        $symlinked_plugin_file = $this->_plugin_files[$plugin_file];
-      } else {
-        /**
-         * Save the symlinked path to test against later.
-         */
-        $realpath = realpath( $plugin_file );
-        /*
-         * Handle plugins that are symlinked
-         */
-        $symlinked_plugin_file =  WP_PLUGIN_DIR . '/' . basename( dirname( $plugin_file ) ) . '/' . basename( $plugin_file );
-        /*
-         * Handle plugins that included in the plugin directory but w/o their own subdirectory
-         */
-        $symlinked_plugin_file = str_replace( '/plugins/plugins/', '/plugins/', $symlinked_plugin_file );
-        if ( ! is_file( $symlinked_plugin_file ) ) {
-          global $pagenow;
-          /**
-           * This is a super hack to figure out the path name for this plugin when it is symlinked
-           * but it's not using the same directory name as the source, i.e. if source is:
-           *    ~/Plugins/my-plugin/my-plugin.php
-           * and symlink in site is:
-           *    ~/Sites/my-site/wp-content/plugins/my-plugin-dev/my-plugin.php
-           */
-          if ( 'plugins.php' == $pagenow && isset( $_GET['action'] ) && 'activate' == $_GET['action'] ) {
-            /**
-             * get_plugins() is very expensive to run but we only need to do on plugin activate
-             */
-            require_once( ABSPATH . '/wp-admin/includes/plugin.php' );
-            $plugins = array_keys( get_plugins() );
-          } else {
-            $plugins = get_option( 'active_plugins' );
-          }
-          $basename_regex = preg_quote( basename( $symlinked_plugin_file ) );
-          foreach( $plugins as $plugin_slug ) {
-            /**
-             * Find the plugin slug with that same main filename, ignoring the containing directory
-             */
-            if ( preg_match( "#/{$basename_regex}$#", $plugin_slug ) ) {
-              /**
-               * Compose the filename based on the plugin's slug. This is almost certainly a symlink
-               */
-              $symlinked_plugin_file = WP_CONTENT_DIR . "/plugins/{$plugin_slug}";
-              /**
-               * See if the realpath of this plugin is the same as the realpath passed in.
-               * And make sure the file actually exists.
-               */
-              if ( realpath( $symlinked_plugin_file ) == $realpath && is_file( $symlinked_plugin_file ) ) {
-                break;
-              }
-            }
-          }
-        }
-        $this->_plugin_files[$plugin_file] = $symlinked_plugin_file;
-        /*
-         * We only want to do this once.
-         */
-        add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
-      }
-      return $symlinked_plugin_file;
+      /**
+       * Save the keys for this plugin file so we can fixup the filenames to support symlinking
+       */
+      $this->_library_keys[$plugin_file][$library_name] = array(
+        'library' => $library_name,
+        'version' => $version,
+      );
     }
 
     /**
@@ -302,21 +327,24 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @param string|bool $loader_file
      */
     function register_plugin_loader( $plugin_file, $loader_file = false ) {
-      $plugin_file = $this->_un_symlink_plugin_file( $plugin_file );
-      $plugin_dir = dirname( $plugin_file );
+      $fixedup_plugin_file = $this->_get_plugin_filepath( $plugin_file );
+
+      $plugin_dir = dirname( $fixedup_plugin_file );
       if ( ! $loader_file ) {
         $loader_file = "{$plugin_dir}/loader.php";
         if ( ! file_exists( $loader_file ) ) {
-          $loader_file = preg_replace( '#(.*?)\.php$#', '$1-loader.php', $plugin_file );
+          $loader_file = preg_replace( '#(.*?)\.php$#', '$1-loader.php', $fixedup_plugin_file );
         }
       }
       if ( '/' != $loader_file[0] )
-        $loader_file = dirname( $plugin_file ) . "/{$loader_file}";
+        $loader_file = dirname( $fixedup_plugin_file ) . "/{$loader_file}";
       if ( ! file_exists( $loader_file ) ) {
         $message = __( '%s specified as a WP_Library_Manager loader file for the %s plugin does not exist.', 'imperative' );
-        echo '<div class="error"><p><strong>ERROR</strong>: ' . sprintf( $message, $loader_file, $plugin_file ) . '</p></div>';
+        echo '<div class="error"><p><strong>ERROR</strong>: ' . sprintf( $message, $loader_file, $fixedup_plugin_file ) . '</p></div>';
       }
-      $this->_loaders[$plugin_file] = $loader_file;
+      $this->_loaders[$fixedup_plugin_file] = $loader_file;
+
+      add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
     }
 
     /**
@@ -352,12 +380,12 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
           $library = end( $versions );
         }
 
-        if ( file_exists( $library->library_path ) ) {
+        if ( file_exists( $library->library_file ) ) {
           /*
            * Assign a property so libraries can know which one was loaded, if needed.
            */
           $this->_current_library = $library;
-          require_once( $library->library_path );
+          require_once( $library->library_file );
         }
       }
 
@@ -401,6 +429,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       foreach( array_keys( get_object_vars( $this ) ) as $property ) {
         $this->$property = null;
       }
+      $this->_library_keys = array();
     }
 
     /**
@@ -446,11 +475,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    * @param string $library_name
    * @param string $version
    * @param string $plugin_file
-   * @param string $library_path
+   * @param string $library_file
    * @param array $args
    */
-  function require_library( $library_name, $version, $plugin_file, $library_path, $args = array() ) {
-    WP_Library_Manager::this()->require_library( $library_name, $version, $plugin_file, $library_path, $args );
+  function require_library( $library_name, $version, $plugin_file, $library_file, $args = array() ) {
+    WP_Library_Manager::this()->require_library( $library_name, $version, $plugin_file, $library_file, $args );
   }
 
   /**
