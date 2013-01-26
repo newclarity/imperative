@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.1.0
+ * @version 0.1.1
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -88,6 +88,27 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     }
 
     /**
+     * @param string $plugin_filepath
+     * @param array $args
+     *
+     * @return string
+     */
+    private function _get_loader_filepath( $plugin_filepath, $args = array() ) {
+      $plugin_dir = dirname( $plugin_filepath );
+      $loader_file = "{$plugin_dir}/loader.php";
+      if ( ! file_exists( $loader_file ) ) {
+        $loader_file = preg_replace( '#(.*?)\.php$#', '$1-loader.php', $plugin_filepath );
+      }
+      if ( '/' != $loader_file[0] )
+        $loader_file = dirname( $plugin_filepath ) . "/{$loader_file}";
+      if ( ! file_exists( $loader_file ) ) {
+        $message = __( '%s specified as a WP_Library_Manager loader file for the %s plugin does not exist.', 'imperative' );
+        echo '<div class="error"><p><strong>ERROR</strong>: ' . sprintf( $message, $loader_file, $plugin_filepath ) . '</p></div>';
+      }
+      return $loader_file;
+    }
+
+    /**
      * Take the plugin slug passed in from WordPress and fixup the filenames fix this plugin to support symlinking
      *
      * This is called after our plugin was loaded, but since we haven't really loaded
@@ -99,7 +120,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $plugin_filepath = WP_PLUGIN_DIR . "/{$plugin_file}";
       $plugin_dir = dirname( $plugin_filepath );
       $real_filepath = realpath( $plugin_filepath );
-      $this->_loaders[$real_filepath] = $plugin_filepath;
+      $this->_loaders[$real_filepath] = $this->_get_loader_filepath( $plugin_filepath );
       foreach( $this->_library_keys[$real_filepath] as $library_name => $library_keys ) {
         $library = $this->_libraries[$library_keys['library']][$library_keys['version']];
 
@@ -239,10 +260,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * Get the full plugin filepath if available in a global variable from WordPress
      *
      * @param string $plugin_file
+     * @param array $args
      *
      * @return string
      */
-    function _get_plugin_filepath( $plugin_file ) {
+    function _get_plugin_filepath( $plugin_file, $args = array() ) {
       global $mu_plugin, $network_plugin, $plugin;
       if ( isset( $mu_plugin ) ) {
         $virtual_filepath = $mu_plugin;
@@ -277,7 +299,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      */
     function require_library( $library_name, $version, $plugin_file, $library_file, $args = array() ) {
 
-      $fixedup_plugin_file = $this->_get_plugin_filepath( $plugin_file, true );
+      $fixedup_plugin_file = $this->_get_plugin_filepath( $plugin_file, $args );
 
       $args['library_name'] = $library_name;
       $args['version'] = $version;
@@ -324,26 +346,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
     /**
      * @param string $plugin_file
-     * @param string|bool $loader_file
+     * @param array $args
      */
-    function register_plugin_loader( $plugin_file, $loader_file = false ) {
-      $fixedup_plugin_file = $this->_get_plugin_filepath( $plugin_file );
-
-      $plugin_dir = dirname( $fixedup_plugin_file );
-      if ( ! $loader_file ) {
-        $loader_file = "{$plugin_dir}/loader.php";
-        if ( ! file_exists( $loader_file ) ) {
-          $loader_file = preg_replace( '#(.*?)\.php$#', '$1-loader.php', $fixedup_plugin_file );
-        }
-      }
-      if ( '/' != $loader_file[0] )
-        $loader_file = dirname( $fixedup_plugin_file ) . "/{$loader_file}";
-      if ( ! file_exists( $loader_file ) ) {
-        $message = __( '%s specified as a WP_Library_Manager loader file for the %s plugin does not exist.', 'imperative' );
-        echo '<div class="error"><p><strong>ERROR</strong>: ' . sprintf( $message, $loader_file, $fixedup_plugin_file ) . '</p></div>';
-      }
-      $this->_loaders[$fixedup_plugin_file] = $loader_file;
-
+    function register_loader( $plugin_file, $args = array() ) {
+      $plugin_file = $this->_get_plugin_filepath( $plugin_file, $args );
+      $this->_loaders[$plugin_file] = $this->_get_loader_filepath( $plugin_file, $args );
       add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
     }
 
@@ -484,12 +491,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
   /**
    * @param string $plugin_file
-   * @param string|bool $loader_file
    * @param array $args
    */
-  function register_plugin_loader( $plugin_file, $loader_file = false, $args = array() ) {
+  function register_plugin_loader( $plugin_file, $args = array() ) {
     $args['loader_type'] = 'plugin';
-    WP_Library_Manager::this()->register_plugin_loader( $plugin_file, $loader_file, $args );
+    WP_Library_Manager::this()->register_loader( $plugin_file, $args );
   }
 
   /**
@@ -499,7 +505,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    */
   function register_theme_loader( $plugin_file, $loader_file = false, $args = array() ) {
     $args['loader_type'] = 'theme';
-    WP_Library_Manager::this()->register_plugin_loader( $plugin_file, $loader_file, $args );
+    WP_Library_Manager::this()->register_loader( $plugin_file, $loader_file, $args );
   }
 
   /**
@@ -508,8 +514,8 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
    * @param string|bool $loader_file
    * @param array $args
    */
-  function register_loader( $plugin_file, $loader_file = false, $args = array() ) {
+  function register_loader( $plugin_file, $loader_file, $args = array() ) {
     _deprecated_function( __FUNCTION__, '0.0.4 of library Imperative', 'register_plugin_loader' );
-    register_plugin_loader( $plugin_file, $loader_file, $args );
+    register_plugin_loader( $plugin_file, $args );
   }
 }
