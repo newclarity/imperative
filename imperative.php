@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.1.1
+ * @version 0.1.2
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -120,7 +120,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $plugin_filepath = WP_PLUGIN_DIR . "/{$plugin_file}";
       $plugin_dir = dirname( $plugin_filepath );
       $real_filepath = realpath( $plugin_filepath );
-      $this->_loaders[$real_filepath] = $this->_get_loader_filepath( $plugin_filepath );
+      $this->_loaders[$real_filepath]['loader_file'] = $this->_get_loader_filepath( $plugin_filepath );
       foreach( $this->_library_keys[$real_filepath] as $library_name => $library_keys ) {
         $library = $this->_libraries[$library_keys['library']][$library_keys['version']];
 
@@ -150,7 +150,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
               continue;
             $to_remove = $library->plugin_file;
 
-            if ( $this->is_plugin_activation() ) {
+            if ( $this->is_plugin_activation( $library->plugin_file ) ) {
 
               $plugin_files = get_plugins();
               $this_plugin_slug = substr( current_filter(), strlen( 'activate_') );
@@ -272,20 +272,24 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         $virtual_filepath = $network_plugin;
       } else if ( isset( $plugin ) ) {
         $virtual_filepath = $plugin;
+      } else {
+        $virtual_filepath = false;
       }
-      if ( $this->is_plugin_activation() ) {
-        $plugin_file = WP_PLUGIN_DIR . "/{$virtual_filepath}";
-      } else if ( $this->is_plugin_uninstall()) {
-        if ( isset( $_GET['checked'] ) )
-          foreach( $_GET['checked'] as $plugin ) {
-            $virtual_filepath = WP_PLUGIN_DIR . "/{$plugin}";
-            if ( realpath( $virtual_filepath ) == $plugin_file ) {
-              $plugin_file = $virtual_filepath;
-              break;
+      if ( $virtual_filepath != $plugin_file ) {
+        if ( $this->is_plugin_activation( $virtual_filepath ) ) {
+          $plugin_file = WP_PLUGIN_DIR . "/{$virtual_filepath}";
+        } else if ( $this->is_plugin_uninstall( $virtual_filepath ) ) {
+          if ( isset( $_GET['checked'] ) )
+              foreach( $_GET['checked'] as $plugin_slug ) {
+                $virtual_filepath = WP_PLUGIN_DIR . "/{$plugin_slug}";
+              if ( realpath( $virtual_filepath ) == $plugin_file ) {
+                $plugin_file = $virtual_filepath;
+                break;
+              }
             }
-          }
-      } else if ( isset( $virtual_filepath ) ) {
-        $plugin_file = $virtual_filepath;
+        } else if ( isset( $virtual_filepath ) ) {
+          $plugin_file = $virtual_filepath;
+        }
       }
       return $plugin_file;
     }
@@ -306,7 +310,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $args['major_version'] = intval( substr( $version, 0, strpos( $version, '.' ) ) );
       $args['plugin_file'] = $fixedup_plugin_file;
 
-      if ( $this->is_plugin_activation() ) {
+      if ( $this->is_plugin_activation( $fixedup_plugin_file ) ) {
         /**
          * If plugin activation we'll store partial and wait to fixup in 'active_plugin' hook.
          * Otherwise let's get the real filename
@@ -341,6 +345,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $this->_library_keys[$plugin_file][$library_name] = array(
         'library' => $library_name,
         'version' => $version,
+        'plugin'  => $fixedup_plugin_file,
       );
     }
 
@@ -349,8 +354,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      * @param array $args
      */
     function register_loader( $plugin_file, $args = array() ) {
-      $plugin_file = $this->_get_plugin_filepath( $plugin_file, $args );
-      $this->_loaders[$plugin_file] = $this->_get_loader_filepath( $plugin_file, $args );
+      $fixup_plugin_file = $this->_get_plugin_filepath( $plugin_file, $args );
+      $this->_loaders[$fixup_plugin_file] = array(
+        'plugin_file' => $plugin_file,
+        'loader_file' => $this->_get_loader_filepath( $plugin_file, $args ),
+      );
       add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
     }
 
@@ -408,9 +416,12 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         global $plugin;
         $save_plugin = $plugin;
         $loaders = apply_filters( 'plugin_loaders', $this->_loaders );
+        global $imperative_loading_plugins;
+        $imperative_loading_plugins = true;
         foreach( $loaders as $plugin => $loader ) {
-          require_once( $loader );
+          require_once( $loader['loader_file'] );
         }
+        unset( $imperative_loading_plugins );
         $plugin = $save_plugin;
       }
 
@@ -442,13 +453,16 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     /**
      * Used to check if we are in an activation callback on the Plugins page.
      *
+     * @param bool|string $plugin_file
+     *
      * @return bool
      */
-    function is_plugin_activation() {
-      global $pagenow;
-      return 'plugins.php' == $pagenow
+    function is_plugin_activation( $plugin_file = false ) {
+      global $plugin, $pagenow;
+      return is_string( $plugin ) && '/' != $plugin[0]
+        && 'plugins.php' == $pagenow
         && isset( $_GET['action'] ) && 'activate' == $_GET['action']
-        && isset( $_GET['plugin'] );
+        && isset( $_GET['plugin'] ) && ( ! $plugin_file || preg_match( '#' . preg_quote( $_GET['plugin'] ) . '$#', $plugin_file ) );
     }
 
     /**
@@ -466,13 +480,25 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     /**
      * Used to check if we are in an activation callback on the Plugins page.
      *
+     * @param bool|string $plugin_file
+     *
      * @return bool
      */
-    function is_plugin_uninstall() {
+    function is_plugin_uninstall( $plugin_file = false ) {
       global $pagenow;
-      return 'plugins.php' == $pagenow
+      $is_plugin_uninstall = 'plugins.php' == $pagenow
         && isset( $_GET['action'] ) && 'delete-selected' == $_GET['action']
         && isset( $_GET['checked'] ) && is_array( $_GET['checked'] );
+      if ( $is_plugin_uninstall && $plugin_file ) {
+        $is_plugin_uninstall = false;
+        foreach( $_GET['checked'] as $plugin_slug ) {
+          if ( preg_match( '#' . preg_quote( $plugin_slug ) . '$#', $plugin_file ) ) {
+            $is_plugin_uninstall = true;
+            break;
+          }
+        }
+      }
+      return $is_plugin_uninstall;
     }
 
   }
