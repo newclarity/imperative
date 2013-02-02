@@ -2,11 +2,15 @@
 /**
  * The Missing require_library() for Embedded Libraries within WordPress Plugins and Themes.
  *
+ * The code in this library is much more complicated than is could be if WordPress core were
+ * changed only slightly to accompdate it. One example:
+ *    http://core.trac.wordpress.org/ticket/22802#comment:41
+ *
  * Follows Semantic Versioning 2.0.0-rc.1 rules; i.e. major version introduce breaking API changes.
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.1.3
+ * @version 0.2.0
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -21,6 +25,14 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
   /**
    */
   class WP_Library_Manager {
+    /**
+     * @var bool
+     */
+    static $loading_plugin_loaders = false;
+    /**
+     * @var bool
+     */
+    static $uninstalling_plugin = false;
     /**
      * @var WP_Library_Manager $_this
      */
@@ -83,8 +95,17 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      *
      */
     function uninstall_plugin() {
-      $this->plugins_loaded( true );
-      $this->release_memory();
+      /**
+       * Grab the slug of the file being uninstalled, it's in the current filter prefixed with 'uninstall_'
+       */
+      self::$uninstalling_plugin = preg_replace( '#^uninstall_(.*)$#', '$1', current_filter() );
+      /**
+       * Grab the slug of the file being uninstalled, it's in the current filter prefixed with 'uninstall_'
+       */
+      $this->_load_libraries();
+      $this->_load_plugin_loaders();
+      $this->_release_memory();
+      self::$uninstalling_plugin = false;
     }
 
     /**
@@ -220,9 +241,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         }
 
       }
-      if ( ! $to_remove )
-        $this->plugins_loaded( true );
-      $this->release_memory();
+      if ( ! $to_remove ) {
+        $this->_load_libraries();
+        $this->_load_plugin_loaders();
+      }
+      $this->_release_memory();
     }
 
     /**
@@ -360,21 +383,32 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     }
 
     /**
-     * @return string
+     * @return object
      */
     function get_current_library() {
       return $this->_current_library;
     }
 
     /**
-     * Load libraries and any required loaders after the plugins are loaded
+     * Load libraries after WordPress declares plugins are loaded
      *
-     * @param bool $force
      */
-    function plugins_loaded( $force = false ) {
-      if ( ! $force && $this->is_plugin_activation() || $this->is_plugin_error_scrape() )
+    function plugins_loaded() {
+      if ( $this->is_plugin_uninstall() || $this->is_plugin_activation() || $this->is_plugin_error_scrape() ) {
+        /**
+         * We need to delay or omit loading (other) plugins in each of these cases
+         */
         return;
+      }
+      $this->_load_libraries();
+      $this->_load_plugin_loaders();
+      $this->_release_memory();
+    }
 
+    /**
+     * Load libraries
+     */
+    private function _load_libraries() {
       /**
        * For each of the libraries that plugins and themes said they required.
        */
@@ -406,6 +440,12 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
        */
       do_action( 'libraries_loaded' );
 
+    }
+
+    /**
+     * Load required plugin loaders
+     */
+    private function _load_plugin_loaders() {
       /**
        * Load any of the plugin loaders that were registered.
        */
@@ -413,12 +453,11 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         global $plugin;
         $save_plugin = $plugin;
         $loaders = apply_filters( 'plugin_loaders', $this->_loaders );
-        global $imperative_loading_plugins;
-        $imperative_loading_plugins = true;
+        self::$loading_plugin_loaders = true;
         foreach( $loaders as $plugin => $loader ) {
           require_once( $loader );
         }
-        unset( $imperative_loading_plugins );
+        self::$loading_plugin_loaders = false;
         $plugin = $save_plugin;
       }
 
@@ -427,9 +466,6 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
        */
       do_action( 'plug_loaders_loaded' );
 
-      if ( ! $force )
-        $this->release_memory();
-
     }
 
     /**
@@ -437,7 +473,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      *
      * @return bool
      */
-    function release_memory() {
+    private function _release_memory() {
       /**
        * Release all the memory we used for this.
        */
@@ -459,10 +495,16 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      */
     function is_plugin_activation( $plugin_file = false ) {
       global $plugin, $pagenow;
-      return ! is_null( $plugin ) && is_string( $plugin ) && '/' != $plugin[0]
-        && 'plugins.php' == $pagenow
+      $is_plugin_activation = 'plugins.php' == $pagenow
         && isset( $_GET['action'] ) && 'activate' == $_GET['action']
-        && isset( $_GET['plugin'] ) && ( ! $plugin_file || preg_match( '#' . preg_quote( $_GET['plugin'] ) . '$#', $plugin_file ) );
+        && isset( $_GET['plugin'] );
+      if ( $is_plugin_activation && $plugin_file ) {
+        $is_plugin_activation = ! is_null( $plugin )
+          && is_string( $plugin )
+          && '/' != $plugin[0]
+          && preg_match( '#' . preg_quote( $_GET['plugin'] ) . '$#', $plugin_file );
+      }
+      return $is_plugin_activation;
     }
 
     /**
