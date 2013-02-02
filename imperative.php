@@ -6,7 +6,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.1.2
+ * @version 0.1.3
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -120,7 +120,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
       $plugin_filepath = WP_PLUGIN_DIR . "/{$plugin_file}";
       $plugin_dir = dirname( $plugin_filepath );
       $real_filepath = realpath( $plugin_filepath );
-      $this->_loaders[$real_filepath]['loader_file'] = $this->_get_loader_filepath( $plugin_filepath );
+      $this->_loaders[$real_filepath] = $this->_get_loader_filepath( $plugin_filepath );
       foreach( $this->_library_keys[$real_filepath] as $library_name => $library_keys ) {
         $library = $this->_libraries[$library_keys['library']][$library_keys['version']];
 
@@ -355,10 +355,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
      */
     function register_loader( $plugin_file, $args = array() ) {
       $fixup_plugin_file = $this->_get_plugin_filepath( $plugin_file, $args );
-      $this->_loaders[$fixup_plugin_file] = array(
-        'plugin_file' => $plugin_file,
-        'loader_file' => $this->_get_loader_filepath( $plugin_file, $args ),
-      );
+      $this->_loaders[$fixup_plugin_file] = $this->_get_loader_filepath( $plugin_file, $args );
       add_action( 'activate_plugin', array( $this, 'activate_plugin' ) );
     }
 
@@ -419,7 +416,7 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
         global $imperative_loading_plugins;
         $imperative_loading_plugins = true;
         foreach( $loaders as $plugin => $loader ) {
-          require_once( $loader['loader_file'] );
+          require_once( $loader );
         }
         unset( $imperative_loading_plugins );
         $plugin = $save_plugin;
@@ -453,13 +450,16 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
     /**
      * Used to check if we are in an activation callback on the Plugins page.
      *
+     * If no parameter is passed tests for the general case.
+     * If a plugin file is passed tests for the specific plugin.
+     *
      * @param bool|string $plugin_file
      *
      * @return bool
      */
     function is_plugin_activation( $plugin_file = false ) {
       global $plugin, $pagenow;
-      return is_string( $plugin ) && '/' != $plugin[0]
+      return ! is_null( $plugin ) && is_string( $plugin ) && '/' != $plugin[0]
         && 'plugins.php' == $pagenow
         && isset( $_GET['action'] ) && 'activate' == $_GET['action']
         && isset( $_GET['plugin'] ) && ( ! $plugin_file || preg_match( '#' . preg_quote( $_GET['plugin'] ) . '$#', $plugin_file ) );
@@ -479,6 +479,9 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
     /**
      * Used to check if we are in an activation callback on the Plugins page.
+     *
+     * If no parameter is passed tests for the general case.
+     * If a plugin file is passed tests for the specific plugin.
      *
      * @param bool|string $plugin_file
      *
