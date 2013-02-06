@@ -10,7 +10,7 @@
  * @see: http://semver.org
  *
  * @package Imperative
- * @version 0.2.0
+ * @version 0.2.1
  * @author Mike Schinkel <mike@newclarity.net>
  * @author Micah Wood <micah@newclarity.net>
  * @license GPL-2.0+ <http://opensource.org/licenses/gpl-2.0.php>
@@ -160,86 +160,109 @@ if ( ! class_exists( 'WP_Library_Manager' ) ) {
 
     /**
      */
-    function activate_plugin( $plugin_file ) {
+    function has_libraries( $plugin_slug ) {
+      return isset( $this->_library_keys[$this->_get_plugin_file_from_slug( $plugin_slug )] );
+    }
+
+    /**
+     */
+    function has_loader( $plugin_slug ) {
+      return isset( $this->_loaders[$this->_get_plugin_file_from_slug( $plugin_slug )] );
+    }
+
+    /**
+     */
+    private function _get_plugin_file_from_slug( $plugin_slug ) {
+      /**
+       * TODO: Make this Windows IIS compatible.
+       */
+      return '/' != $plugin_slug[0] ? WP_PLUGIN_DIR . "/{$plugin_slug}" : $plugin_slug;
+    }
+
+    /**
+     */
+    function activate_plugin( $plugin_slug ) {
       $to_remove = false;
-      $this->_fixup_symlinked( $plugin_file );
-      foreach ( $this->_libraries as $versions ) {
-        if ( 1 < count( $versions ) ) {
-          $first_library = current( $versions );
-          foreach( $versions as $library ) {
-            if ( $first_library->major_version == $library->major_version )
-              continue;
-            $to_remove = $library->plugin_file;
+      if ( $this->has_loader( $plugin_slug ) ) {
+        $this->_fixup_symlinked( $plugin_slug );
+        foreach ( $this->_libraries as $versions ) {
+          if ( 1 < count( $versions ) ) {
+            $first_library = current( $versions );
+            foreach( $versions as $library ) {
+              if ( $first_library->major_version == $library->major_version )
+                continue;
+              $to_remove = $library->plugin_file;
 
-            if ( $this->is_plugin_activation( $library->plugin_file ) ) {
+              if ( $this->is_plugin_activation( $library->plugin_file ) ) {
 
-              $plugin_files = get_plugins();
-              $this_plugin_slug = substr( current_filter(), strlen( 'activate_') );
-              $this_plugin = $plugin_files[$this_plugin_slug];
+                $plugin_files = get_plugins();
+                $this_plugin_slug = substr( current_filter(), strlen( 'activate_') );
+                $this_plugin = $plugin_files[$this_plugin_slug];
 
-              $other_plugin_slug = ltrim( str_replace( WP_PLUGIN_DIR, '', $first_library->plugin_file ), '/' );
-              $other_plugin = $plugin_files[$other_plugin_slug];
+                $other_plugin_slug = ltrim( str_replace( WP_PLUGIN_DIR, '', $first_library->plugin_file ), '/' );
+                $other_plugin = $plugin_files[$other_plugin_slug];
 
-              if ( preg_match( "#{$this_plugin_slug}$#", $library->plugin_file ) ) {
-                $this_version = $library->version;
-                $other_version = $first_library->version;
-              } else {
-                $this_version = $first_library->version;
-                $other_version = $library->version;
+                if ( preg_match( "#{$this_plugin_slug}$#", $library->plugin_file ) ) {
+                  $this_version = $library->version;
+                  $other_version = $first_library->version;
+                } else {
+                  $this_version = $first_library->version;
+                  $other_version = $library->version;
+                }
+
+                if ( version_compare( $this_version, $other_version ) ) {
+                  $guilty_plugin = $other_plugin['Name'];
+                  $newer_version = $this_version;
+                } else {
+                  $guilty_plugin = $this_plugin['Name'];
+                  $newer_version =  $other_version;
+                }
+
+                $message = sprintf( __( '<p><strong>Plugin Activation Error:</strong> The plugin you trying to activate named
+                  <strong>%s</strong> contains <strong>version %s</strong> of the <strong>%s</strong> embedded library
+                  and it conflicts with <strong>version %s</strong> of the same library
+                  used by the <strong>%s</strong> plugin which your site has active.</p>
+                  <p>To resolve this issue you can:</p>
+                  <p>&nbsp;&nbsp;&nbsp;1.) Choose not to use the <strong>%s</strong> plugin. If so you don\'t need to do anything.</p>
+                  <p>&nbsp;&nbsp;&nbsp;2.) Deactivate the <strong>%s</strong> plugin and choose to activate the <strong>%s</strong> plugin instead.</p>
+                  <p>&nbsp;&nbsp;&nbsp;3.) Contact the author(s) of the <strong>%s</strong> plugin via their support page and ask them to upgrade to <strong>version %s</strong> of the <strong>%s</strong> embedded library.</p>',
+                  'imperative' ),
+                  $this_plugin['Name'], $this_version,
+                  $library->library_name,
+                  $other_version, $other_plugin['Name'],
+                  $this_plugin['Name'],
+                  $other_plugin['Name'], $this_plugin['Name'], $guilty_plugin,
+                  $newer_version, $library->library_name
+                );
+                $activation_error = $this->get_activation_error();
+                if ( $activation_error )
+                  $message = "{$activation_error}<hr>{$message}";
+                $this->update_activation_error( $message );
               }
-
-              if ( version_compare( $this_version, $other_version ) ) {
-                $guilty_plugin = $other_plugin['Name'];
-                $newer_version = $this_version;
-              } else {
-                $guilty_plugin = $this_plugin['Name'];
-                $newer_version =  $other_version;
-              }
-
-              $message = sprintf( __( '<p><strong>Plugin Activation Error:</strong> The plugin you trying to activate named
-                <strong>%s</strong> contains <strong>version %s</strong> of the <strong>%s</strong> embedded library
-                and it conflicts with <strong>version %s</strong> of the same library
-                used by the <strong>%s</strong> plugin which your site has active.</p>
-                <p>To resolve this issue you can:</p>
-                <p>&nbsp;&nbsp;&nbsp;1.) Choose not to use the <strong>%s</strong> plugin. If so you don\'t need to do anything.</p>
-                <p>&nbsp;&nbsp;&nbsp;2.) Deactivate the <strong>%s</strong> plugin and choose to activate the <strong>%s</strong> plugin instead.</p>
-                <p>&nbsp;&nbsp;&nbsp;3.) Contact the author(s) of the <strong>%s</strong> plugin via their support page and ask them to upgrade to <strong>version %s</strong> of the <strong>%s</strong> embedded library.</p>',
-                'imperative' ),
-                $this_plugin['Name'], $this_version,
-                $library->library_name,
-                $other_version, $other_plugin['Name'],
-                $this_plugin['Name'],
-                $other_plugin['Name'], $this_plugin['Name'], $guilty_plugin,
-                $newer_version, $library->library_name
-              );
-              $activation_error = $this->get_activation_error();
-              if ( $activation_error )
-                $message = "{$activation_error}<hr>{$message}";
-              $this->update_activation_error( $message );
+              break;
             }
-            break;
           }
         }
-      }
-      if ( $to_remove ) {
-        foreach ( $this->_libraries as $library_name => $versions )
-          foreach( $versions as $version => $library )
-            if ( $to_remove == $library->plugin_file )
-              unset( $this->_libraries[$library_name][$version] );
+        if ( $to_remove ) {
+          foreach ( $this->_libraries as $library_name => $versions )
+            foreach( $versions as $version => $library )
+              if ( $to_remove == $library->plugin_file )
+                unset( $this->_libraries[$library_name][$version] );
 
-        unset( $this->_loaders[$to_remove] );
+          unset( $this->_loaders[$to_remove] );
 
-        $plugin_files = array_flip( $this->_plugin_files );
-        unset( $this->_plugin_files[$plugin_files[$to_remove]] );
+          $plugin_files = array_flip( $this->_plugin_files );
+          unset( $this->_plugin_files[$plugin_files[$to_remove]] );
 
-        global $status, $page;
+          global $status, $page;
 
-        if ( ! $this->is_plugin_error_scrape() ) {
-          $redirect = self_admin_url( "plugins.php?error=true&plugin={$this_plugin_slug}&plugin_status={$status}&paged={$page}" );
-          wp_redirect( add_query_arg( '_error_nonce', wp_create_nonce( 'plugin-activation-error_' . $this_plugin_slug ), $redirect ) );
-          exit;
+          if ( ! $this->is_plugin_error_scrape() ) {
+            $redirect = self_admin_url( "plugins.php?error=true&plugin={$this_plugin_slug}&plugin_status={$status}&paged={$page}" );
+            wp_redirect( add_query_arg( '_error_nonce', wp_create_nonce( 'plugin-activation-error_' . $this_plugin_slug ), $redirect ) );
+            exit;
+          }
+
         }
-
       }
       if ( ! $to_remove ) {
         $this->_load_libraries();
